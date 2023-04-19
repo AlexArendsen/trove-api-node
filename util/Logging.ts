@@ -20,7 +20,7 @@ export const Log = {
     },
 
     SetUser: (userId: string) => {
-        appInsights.defaultClient.context.tags[appInsights.defaultClient.context.keys.userId] = userId
+        ai.context.tags[ai.context.keys.userId] = userId
     }
 
 }

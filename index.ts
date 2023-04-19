@@ -1,9 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import * as appInsights from "applicationinsights";
-if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) appInsights.setup().start();
-
 import bodyParser from 'body-parser';
 import express, { NextFunction } from 'express';
 import { Log } from './util/Logging';
@@ -15,7 +12,11 @@ import { TrThrow } from './models/TrException';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken'
 import { DbItem } from './db/DbItem';
+import { ConfigureAppInsights } from './startup/ConfigureAppInsights';
+import { CheckJwt, ConfigureAuthentication } from './startup/ConfigureAuthentication';
 
+ConfigureAuthentication();
+ConfigureAppInsights();
 
 // Initialize the express engine
 const app: express.Application = express();
@@ -33,7 +34,6 @@ const env: string = process.env.ENV;
 const installMiddleware = () => {
 
     // Request logging
-
     app.use((req, res, next) => {
         console.log(`[REQUEST] ${req.method} ${req.path}`)
         next()
@@ -57,52 +57,27 @@ const installMiddleware = () => {
     app.use(cors(corsOptions));
     app.use(bodyParser.json());
 
-    // app.use(session({
-    //     store: MongoStore.create({
-    //         mongoUrl: process.env.COSMOS_CXN,
-    //         dbName: 'Default',
-    //         collectionName: 'AuthSessions',
-    //         autoRemove: 'interval',
-    //         autoRemoveInterval: 10,
-    //         crypto: {
-    //             secret: process.env.COOKIE_CRYPTO_SECRET
-    //         }
-    //     }),
-    //     resave: false, 
-    //     saveUninitialized: false,
-    //     secret: process.env.COOKIE_SECRET,
-    //     cookie: {
-    //         // Only set secure cookies in production
-    //         // In dev, allow cookies over http
-    //         secure: app.get('env') === 'production',
-    //         httpOnly: true,
-    //         maxAge: 2592000000, // 30 days in miliseconds
-    //         sameSite: 'lax',
-    //         domain: process.env.HOSTNAME !== 'localhost' ? `.${process.env.HOSTNAME}` : undefined
-    //     },
-    //     name: 'sid'
-    // }));
 };
 
 const installRoutes = () => {
 
-    app.post('/api/login', asyncHandler(async (req, res) => {
+    // app.post('/api/login', asyncHandler(async (req, res) => {
 
-        const username = req.body.username
-        const password = req.body.password
+    //     const username = req.body.username
+    //     const password = req.body.password
 
-        const user = await DbUser.findOne({ username })
-        if (user == null) TrThrow.NotAuthenticated('Invalid login')
+    //     const user = await DbUser.findOne({ username })
+    //     if (user == null) TrThrow.NotAuthenticated('Invalid login')
 
-        const okay = await bcrypt.compare(password, user.password)
-        if (!okay) TrThrow.NotAuthenticated('Invalid login')
+    //     const okay = await bcrypt.compare(password, user.password)
+    //     if (!okay) TrThrow.NotAuthenticated('Invalid login')
 
-        const token = jwt.sign({ username }, process.env.JWT_SECRET);
-        res.send({ token })
+    //     const token = jwt.sign({ username }, process.env.JWT_SECRET);
+    //     res.send({ token })
 
-    }))
+    // }))
 
-    app.get('/api/items', asyncHandler(async (req, res) => {
+    app.get('/api/items', CheckJwt, asyncHandler(async (req, res) => {
 
         const user = await getUser(req);
         if (!user) TrThrow.NotAllowed('Not registered')
@@ -120,7 +95,7 @@ const installRoutes = () => {
         props: object,
         parent_id?: string
     }>
-    app.post('/api/item', asyncHandler(async (req, res) => {
+    app.post('/api/item', CheckJwt, asyncHandler(async (req, res) => {
         const user = await getUser(req);
         const body = req.body as ItemUpsert
 
@@ -133,12 +108,11 @@ const installRoutes = () => {
         }
 
         const created = await DbItem.create(toCreate)
-        console.log('created object', created)
         res.send(created)
     }))
 
     const editableFields = new Set(['title', 'description', 'parent_id'])
-    app.put('/api/item', asyncHandler(async (req, res) => {
+    app.put('/api/item', CheckJwt, asyncHandler(async (req, res) => {
         const user = await getUser(req);
         const body = req.body as ItemUpsert
         const existing = await DbItem.findById(body._id)
@@ -152,17 +126,17 @@ const installRoutes = () => {
         res.send(existing)
     }))
 
-    app.put('/api/item/:id/check', asyncHandler(async (req, res) => {
+    app.put('/api/item/:id/check', CheckJwt, asyncHandler(async (req, res) => {
         const item = await checkItem(req, req.params.id, true)
         res.send(item)
     }))
 
-    app.put('/api/item/:id/uncheck', asyncHandler(async (req, res) => {
+    app.put('/api/item/:id/uncheck', CheckJwt, asyncHandler(async (req, res) => {
         const item = await checkItem(req, req.params.id, false)
         res.send(item)
     }))
 
-    app.delete('/api/item/:id', asyncHandler(async (req, res) => {
+    app.delete('/api/item/:id', CheckJwt, asyncHandler(async (req, res) => {
         const user = await getUser(req);
         const itemId = req.params.id
         const existing = await DbItem.findById(itemId)
@@ -172,17 +146,19 @@ const installRoutes = () => {
         res.send(existing)
     }))
 
-    // TODO -- Middleware
+    // TODO -- Middleware, maybe integrate with CheckJwt
     const getUser = async (req: express.Request) => {
-        const token = req.headers.authorization.replace(/^Bearer /, '')
-        const userOk = await jwt.verify(token, process.env.JWT_SECRET, {
-            ignoreExpiration: true,
-            ignoreNotBefore: true
-        })
-        const payload = userOk as { username: string }
 
-        if (!userOk) TrThrow.NotAuthenticated('Not authenticated')
-        return await DbUser.findOne({ username: payload.username })
+        const token = req.headers.authorization.replace(/^Bearer /, '')
+        const payload = jwt.decode(token)
+        if (typeof payload === 'string') throw TrThrow.NotAuthenticated('Invalid token')
+        const existing = await DbUser.findOne({ auth0id: payload.sub })
+
+        // Auto-onboard new user
+        if (!existing) 
+            return await DbUser.create({ auth0id: payload.sub, username: payload.sub })
+
+        return existing;
     }
 
     const checkItem = async (req: express.Request, itemId: string, checked: boolean) => {
