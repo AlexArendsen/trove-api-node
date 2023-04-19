@@ -9,7 +9,6 @@ import asyncHandler from 'express-async-handler'
 import { MongooseConnect } from './providers/Mongoose';
 import { DbUser } from './db/DbUser';
 import { TrThrow } from './models/TrException';
-import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken'
 import { DbItem } from './db/DbItem';
 import { ConfigureAppInsights } from './startup/ConfigureAppInsights';
@@ -23,13 +22,8 @@ const app: express.Application = express();
 const proto: string = process.env.PROTOCOL;
 const hostname: string = process.env.HOSTNAME;
 const port: number = parseInt(process.env.PORT);
-const domain: string = (() => {
-    const needsPort = (proto === 'https' && port !== 443) || (proto === 'http' && port !== 80)
-    const base = `${proto}://${hostname}`
-    return needsPort ? `${base}:${port}` : base
-})()
-const iface: string = process.env.INTERFACE;
-const env: string = process.env.ENV;
+const iface: string = process.env.INTERFACE; // Network interface to bind to e.g., 0.0.0.0
+const env: string = process.env.ENV; // dev, prod
 
 const installMiddleware = () => {
 
@@ -40,8 +34,9 @@ const installMiddleware = () => {
     })
 
     // CORS
-    let originSettings = [ new RegExp(`${hostname}$`) ]
-    if (env === 'dev') originSettings = [/localhost:\d{4}/, /192\.168\.0/, /172\.10\.20/, /127\.0\.0\.1/, /ecstatic-saha-cbbb0e\.netlify\.app/, ...originSettings];
+    const envCorsOrigins = process.env.CORS_ORIGINS?.split(' ').map(o => new RegExp(o))
+    let originSettings = envCorsOrigins
+    if (env === 'dev') originSettings = [/localhost:\d{4,5}/, /192\.168\.0/, /172\.10\.20/, /127\.0\.0\.1/, /ecstatic-saha-cbbb0e\.netlify\.app/, ...originSettings];
 
     const corsOptions = {
         origin: originSettings,
@@ -55,27 +50,13 @@ const installMiddleware = () => {
     app.set('trust proxy', true);
     app.options('/*', cors(corsOptions));
     app.use(cors(corsOptions));
+
+    // JSON bodies
     app.use(bodyParser.json());
 
 };
 
 const installRoutes = () => {
-
-    // app.post('/api/login', asyncHandler(async (req, res) => {
-
-    //     const username = req.body.username
-    //     const password = req.body.password
-
-    //     const user = await DbUser.findOne({ username })
-    //     if (user == null) TrThrow.NotAuthenticated('Invalid login')
-
-    //     const okay = await bcrypt.compare(password, user.password)
-    //     if (!okay) TrThrow.NotAuthenticated('Invalid login')
-
-    //     const token = jwt.sign({ username }, process.env.JWT_SECRET);
-    //     res.send({ token })
-
-    // }))
 
     app.get('/api/items', CheckJwt, asyncHandler(async (req, res) => {
 
@@ -111,6 +92,7 @@ const installRoutes = () => {
         res.send(created)
     }))
 
+    // Edit Item
     const editableFields = new Set(['title', 'description', 'parent_id'])
     app.put('/api/item', CheckJwt, asyncHandler(async (req, res) => {
         const user = await getUser(req);
@@ -126,6 +108,7 @@ const installRoutes = () => {
         res.send(existing)
     }))
 
+    // Check / Uncheck Item
     app.put('/api/item/:id/check', CheckJwt, asyncHandler(async (req, res) => {
         const item = await checkItem(req, req.params.id, true)
         res.send(item)
@@ -136,6 +119,7 @@ const installRoutes = () => {
         res.send(item)
     }))
 
+    // Delete Item
     app.delete('/api/item/:id', CheckJwt, asyncHandler(async (req, res) => {
         const user = await getUser(req);
         const itemId = req.params.id

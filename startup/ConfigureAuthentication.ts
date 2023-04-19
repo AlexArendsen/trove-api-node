@@ -7,10 +7,12 @@ import { auth } from 'express-oauth2-jwt-bearer'
 let authMiddleware: Handler = null
 
 export const ConfigureAuthentication = () => {
-    authMiddleware = auth({
+    const config = {
         audience: process.env.JWT_AUDIENCE,
-        issuerBaseURL: process.env.JWT_ISSUER
-    })
+        issuerBaseURL: process.env.JWT_ISSUER,
+        tokenSigningAlg: process.env.JWT_ALGO
+    }
+    authMiddleware = auth(config)
 }
 
 //export const 
