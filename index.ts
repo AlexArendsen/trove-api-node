@@ -190,7 +190,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: NextFuncti
     } else {
         res.status(500).json({ code: 'INTERNAL_ERROR', message: 'An internal error ocurred' })
     }
-})
+k})
 
 const start = async () => {
 
