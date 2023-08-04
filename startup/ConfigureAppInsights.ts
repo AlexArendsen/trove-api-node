@@ -13,12 +13,13 @@ export const ConfigureAppInsights = () => {
     // All this stuff is great but I want to keep things cheap in Azure. Might turn some back on later
     appInsights.setup()
         .setAutoCollectConsole(false)
-        .setAutoCollectDependencies(false)
-        .setAutoCollectExceptions(false)
         .setAutoCollectHeartbeat(false)
         .setAutoCollectIncomingRequestAzureFunctions(false)
         .setAutoCollectPerformance(false)
-        .setAutoCollectRequests(true) // <-- need this though
+
+        .setAutoCollectDependencies(true)
+        .setAutoCollectExceptions(true)
+        .setAutoCollectRequests(true)
 
         .setSendLiveMetrics(false)
         .setInternalLogging(false)

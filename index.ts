@@ -13,6 +13,7 @@ import jwt from 'jsonwebtoken'
 import { DbItem } from './db/DbItem';
 import { ConfigureAppInsights } from './startup/ConfigureAppInsights';
 import { CheckJwt, ConfigureAuthentication } from './startup/ConfigureAuthentication';
+import { ShapeQuery } from './util/ShapeQuery';
 
 ConfigureAuthentication();
 ConfigureAppInsights();
@@ -73,6 +74,7 @@ const installRoutes = () => {
         _id: string,
         title: string,
         description: string,
+        data: any,
         props: object,
         parent_id?: string
     }>
@@ -80,9 +82,13 @@ const installRoutes = () => {
         const user = await getUser(req);
         const body = req.body as ItemUpsert
 
+        if ((body.description?.length || 0) > 2048) TrThrow.InvalidInput('Item description')
+        if (body.data && JSON.stringify(body.data).length > 2048) TrThrow.InvalidInput('Item data payload')
+
         const toCreate = {
             title: body.title,
             description: body.description,
+            data: body.data,
             parent_id: body.parent_id,
             created_at: new Date(),
             user_id: user._id
@@ -93,7 +99,7 @@ const installRoutes = () => {
     }))
 
     // Edit Item
-    const editableFields = new Set(['title', 'description', 'parent_id'])
+    const editableFields = new Set(['title', 'description', 'data', 'parent_id'])
     app.put('/api/item', CheckJwt, asyncHandler(async (req, res) => {
         const user = await getUser(req);
         const body = req.body as ItemUpsert
@@ -124,9 +130,22 @@ const installRoutes = () => {
         const user = await getUser(req);
         const itemId = req.params.id
         const existing = await DbItem.findById(itemId)
+        if (!existing) TrThrow.NotFound('Item not found')
         if (!existing.user_id.equals(user._id)) TrThrow.NotAllowed('Item not authorized for current user')
 
         await DbItem.findByIdAndDelete(itemId)
+        res.send(existing)
+    }))
+
+    app.delete('/api/items', CheckJwt, asyncHandler(async (req, res) => {
+        const user = await getUser(req);
+        const itemIds = ShapeQuery.List(req.query, 'ids');
+        const query = { _id: { $in: itemIds } }
+        const existing = await DbItem.find(query)
+        if (!existing?.length) TrThrow.NotFound('Item not found')
+        if (existing.some(e => !e.user_id.equals(user._id))) TrThrow.NotAllowed('Item not authorized for current user')
+
+        await DbItem.deleteMany(query)
         res.send(existing)
     }))
 
