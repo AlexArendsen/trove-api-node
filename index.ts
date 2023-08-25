@@ -14,6 +14,7 @@ import { DbItem } from './db/DbItem';
 import { ConfigureAppInsights } from './startup/ConfigureAppInsights';
 import { CheckJwt, ConfigureAuthentication } from './startup/ConfigureAuthentication';
 import { ShapeQuery } from './util/ShapeQuery';
+import { GroupByFirst } from './util/Arrays';
 
 ConfigureAuthentication();
 ConfigureAppInsights();
@@ -114,6 +115,28 @@ const installRoutes = () => {
         res.send(existing)
     }))
 
+    // Sort Items
+    type ItemSort = { itemId: string, newRank: number }
+    app.put('/api/items/sort', CheckJwt, asyncHandler(async (req, res) => {
+        const user = await getUser(req);
+        const body = req.body as ItemSort[]
+        const itemIds = body.map(x => x.itemId)
+        const items = await DbItem.find({
+            _id: { $in: itemIds },
+            user_id: user._id
+        })
+
+        const updateLookup = GroupByFirst(body, x => x.itemId)
+        
+        for (let i of items) {
+            i.rank = updateLookup[i._id?.toString()].newRank
+            console.log(`Update item ${ i.title } to rank ${ i.rank }`)
+            await DbItem.findOneAndUpdate(i._id, i)
+        }
+
+        res.send(items)
+    }))
+
     // Check / Uncheck Item
     app.put('/api/item/:id/check', CheckJwt, asyncHandler(async (req, res) => {
         const item = await checkItem(req, req.params.id, true)
@@ -190,7 +213,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: NextFuncti
     } else {
         res.status(500).json({ code: 'INTERNAL_ERROR', message: 'An internal error ocurred' })
     }
-k})
+})
 
 const start = async () => {
 

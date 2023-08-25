@@ -7,6 +7,7 @@ const DbItemSchema = new Schema({
     parent_id: String,
     user_id: mongoose.Schema.Types.ObjectId,
     checked: Boolean,
+    rank: Number,
     created_at: Date
 })
 
