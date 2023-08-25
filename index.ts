@@ -116,7 +116,7 @@ const installRoutes = () => {
     }))
 
     // Sort Items
-    type ItemSort = { itemId: string, newRank: number }
+    type ItemSort = { itemId: string, newRank: number, newParent?: string }
     app.put('/api/items/sort', CheckJwt, asyncHandler(async (req, res) => {
         const user = await getUser(req);
         const body = req.body as ItemSort[]
@@ -129,8 +129,13 @@ const installRoutes = () => {
         const updateLookup = GroupByFirst(body, x => x.itemId)
         
         for (let i of items) {
-            i.rank = updateLookup[i._id?.toString()].newRank
+            const update = updateLookup[i._id?.toString()]
+            i.rank = update.newRank
             console.log(`Update item ${ i.title } to rank ${ i.rank }`)
+            if (update.newParent) {
+                console.log('ALSO move it to its new parent')
+                i.parent_id = update.newParent
+            }
             await DbItem.findOneAndUpdate(i._id, i)
         }
 
