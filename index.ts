@@ -115,6 +115,35 @@ const installRoutes = () => {
         res.send(existing)
     }))
 
+    // Mass Move Items
+    type ItemMassMove = { ids: string[], new_parent: string }
+    app.put('/api/items/move', CheckJwt, asyncHandler(async (req, res) => {
+
+        const user = await getUser(req);
+        const body = req.body as ItemMassMove
+        const items = await DbItem.find({
+            _id: { $in: body.ids },
+            user_id: user._id
+        })
+
+        if (!items.length) TrThrow.NotAllowed('None of the indicated items are permitted to the current user')
+
+        const parent = await DbItem.findOne({
+            _id: body.new_parent,
+            user_id: user._id
+        })
+
+        if (!parent) TrThrow.NotAllowed('Cannot move to indicated new parent')
+
+        for(let i of items) {
+            i.parent_id = body.new_parent
+            await DbItem.findOneAndUpdate(i._id, i)
+        }
+
+        res.sendStatus(204)
+
+    }))
+
     // Sort Items
     type ItemSort = { itemId: string, newRank: number, newParent?: string }
     app.put('/api/items/sort', CheckJwt, asyncHandler(async (req, res) => {
