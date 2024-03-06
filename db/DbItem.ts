@@ -8,7 +8,8 @@ const DbItemSchema = new Schema({
     user_id: mongoose.Schema.Types.ObjectId,
     checked: Boolean,
     rank: Number,
-    created_at: Date
+    created_at: Date,
+    isRoot: Boolean
 })
 
 export const DbItem = model('Item', DbItemSchema, 'items')

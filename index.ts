@@ -58,12 +58,43 @@ const installMiddleware = () => {
 
 };
 
+const recapitate = async (userId: string) => {
+
+    console.log('>> Checking if need root')
+    const existingRoot = await DbItem.exists({ isRoot: true })
+    if (existingRoot !== null) {
+        const fullRoot = await DbItem.findOne({ isRoot: true })
+        console.log(`>> No root needed, found`, fullRoot)
+        return;
+    }
+    console.log('>> Root needed, creating one...')
+
+    // Create new root
+    const root = await DbItem.create({
+        checked: false,
+        created_at: new Date(),
+        title: 'Home',
+        isRoot: true,
+        user_id: userId,
+        parent_id: null
+    })
+    console.log(`>> New root established! ID is ${root._id}`)
+
+    // Reparent all null-parent items to new root
+    await DbItem.updateMany({ parent_id: null, isRoot: false }, { '$set': { parent_id: root._id } })
+
+    // Make sure we didn't just connect our new root to itself
+    await DbItem.updateOne({ isRoot: true }, { '$set': { parent_id: null } })
+
+}
+
 const installRoutes = () => {
 
     app.get('/api/items', CheckJwt, asyncHandler(async (req, res) => {
 
         const user = await getUser(req);
         if (!user) TrThrow.NotAllowed('Not registered')
+        await recapitate(user.id)
         const items = await DbItem.find({ user_id: user.id }).exec()
 
         res.send(items)
