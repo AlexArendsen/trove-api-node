@@ -61,9 +61,10 @@ const installMiddleware = () => {
 const recapitate = async (userId: string) => {
 
     console.log('>> Checking if need root')
-    const existingRoot = await DbItem.exists({ isRoot: true })
+
+    const existingRoot = await DbItem.exists({ isRoot: true, user_id: userId })
     if (existingRoot !== null) {
-        const fullRoot = await DbItem.findOne({ isRoot: true })
+        const fullRoot = await DbItem.findOne({ isRoot: true, user_id: userId })
         console.log(`>> No root needed, found`, fullRoot)
         return;
     }
@@ -81,10 +82,10 @@ const recapitate = async (userId: string) => {
     console.log(`>> New root established! ID is ${root._id}`)
 
     // Reparent all null-parent items to new root
-    await DbItem.updateMany({ parent_id: null, isRoot: false }, { '$set': { parent_id: root._id } })
+    await DbItem.updateMany({ parent_id: null, isRoot: false, user_id: userId }, { '$set': { parent_id: root._id } })
 
     // Make sure we didn't just connect our new root to itself
-    await DbItem.updateOne({ isRoot: true }, { '$set': { parent_id: null } })
+    await DbItem.updateOne({ isRoot: true, user_id: userId }, { '$set': { parent_id: null } })
 
 }
 
@@ -136,11 +137,14 @@ const installRoutes = () => {
         const user = await getUser(req);
         const body = req.body as ItemUpsert
         const existing = await DbItem.findById(body._id)
+
         if (!existing.user_id.equals(user._id)) TrThrow.NotAllowed('Item not authorized for current user')
 
         Object.entries(body)
             .filter(([key, value]) => !!value && editableFields.has(key))
             .forEach(([key, value]) => existing[key] = value);
+
+        if (existing.isRoot && existing.parent_id != null) TrThrow.NotAllowed('Root item cannot be moved')
 
         await DbItem.findByIdAndUpdate(body._id, existing)
         res.send(existing)
@@ -158,6 +162,7 @@ const installRoutes = () => {
         })
 
         if (!items.length) TrThrow.NotAllowed('None of the indicated items are permitted to the current user')
+        if (items.some(i => i.isRoot)) TrThrow.NotAllowed('Root item cannot be moved')
 
         const parent = await DbItem.findOne({
             _id: body.new_parent,
@@ -220,6 +225,7 @@ const installRoutes = () => {
         const existing = await DbItem.findById(itemId)
         if (!existing) TrThrow.NotFound('Item not found')
         if (!existing.user_id.equals(user._id)) TrThrow.NotAllowed('Item not authorized for current user')
+        if (existing.isRoot) TrThrow.NotAllowed('Root item cannot be deleted')
 
         await DbItem.findByIdAndDelete(itemId)
         res.send(existing)
