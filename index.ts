@@ -141,7 +141,7 @@ const installRoutes = () => {
         if (!existing.user_id.equals(user._id)) TrThrow.NotAllowed('Item not authorized for current user')
 
         Object.entries(body)
-            .filter(([key, value]) => !!value && editableFields.has(key))
+            .filter(([key, value]) => (!!value || value === '') && editableFields.has(key))
             .forEach(([key, value]) => existing[key] = value);
 
         if (existing.isRoot && existing.parent_id != null) TrThrow.NotAllowed('Root item cannot be moved')
