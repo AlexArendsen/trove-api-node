@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.ts",
   "scripts": {
-    "start": "node ./build/index.js",
+    "start": "tsc && node ./build/index.js",
     "start:local": "SSL_CERT_FILE=~/certs/localhost.crt SSL_KEY_FILE=~/certs/localhost.key nodemon index.ts --inspect",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -23,9 +23,7 @@
     "express-oauth2-jwt-bearer": "^1.4.1",
     "express-openid-connect": "^2.14.0",
     "jsonwebtoken": "^9.0.0",
-    "mongoose": "^7.0.3"
-  },
-  "devDependencies": {
+    "mongoose": "^7.0.3",
     "@types/bcrypt": "^5.0.0",
     "@types/express": "^4.17.17",
     "@types/jsonwebtoken": "^9.0.1",
