@@ -15,6 +15,8 @@ import { ConfigureAppInsights } from './startup/ConfigureAppInsights';
 import { CheckJwt, ConfigureAuthentication } from './startup/ConfigureAuthentication';
 import { ShapeQuery } from './util/ShapeQuery';
 import { GroupByFirst } from './util/Arrays';
+import { LoadCustomSsl } from './startup/LoadCustomSsl';
+import https from 'https'
 
 ConfigureAuthentication();
 ConfigureAppInsights();
@@ -26,6 +28,9 @@ const hostname: string = process.env.HOSTNAME;
 const port: number = parseInt(process.env.PORT);
 const iface: string = process.env.INTERFACE; // Network interface to bind to e.g., 0.0.0.0
 const env: string = process.env.ENV; // dev, prod
+
+// If defined, use custom SSL
+const customSsl = LoadCustomSsl()
 
 const installMiddleware = () => {
 
@@ -292,7 +297,13 @@ const start = async () => {
     await MongooseConnect
 
     // Server setup
-    app.listen(port, iface, () => { console.log(`TREASURE TROVING ON ${iface}:${port}/`); });
+    if (customSsl.defined) {
+        https.createServer(customSsl, app).listen(port, iface, () => {
+            console.log(`SECURELY TREASURE TROVING ON ${iface}:${port}/`); 
+        })
+    } else {
+        app.listen(port, iface, () => { console.log(`TREASURE TROVING ON ${iface}:${port}/`); });
+    }
 }
 
 start();
